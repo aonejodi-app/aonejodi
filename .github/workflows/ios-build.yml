@@ -25,41 +25,30 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Install Dependencies
+      - name: Install Dependencies & Build iOS
+        working-directory: './aonejodi 2'
         run: |
-          TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
-          echo "Target directory: $TARGET_DIR"
-          cd "$TARGET_DIR"
+          echo "==> Current Directory: $(pwd)"
           flutter pub get
-
-      - name: Build iOS App
-        run: |
-          TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
-          cd "$TARGET_DIR"
+          
           if [ -d "ios" ]; then
             cd ios
             pod install || true
             cd ..
           fi
+          
           flutter build ios --release --no-codesign
 
       - name: Create IPA Package
+        working-directory: './aonejodi 2'
         run: |
-          TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
-          cd "$TARGET_DIR"
-          BUILD_PATH="build/ios/iphoneos"
-          if [ -d "$BUILD_PATH" ]; then
-            cd "$BUILD_PATH"
-            mkdir -p Payload
-            cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
-            zip -r ios-app.ipa Payload
-          else
-            echo "Build path not found"
-            exit 1
-          fi
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
+          zip -r ios-app.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-runner
-          path: "**/build/ios/iphoneos/ios-app.ipa"
+          path: "aonejodi 2/build/ios/iphoneos/ios-app.ipa"
