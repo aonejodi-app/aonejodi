@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">AoneJodi</string>
+
+    <!-- Facebook -->
+    <string name="facebook_app_id">2449693722133561</string>
+    <string name="facebook_client_token">5bdae57a78f66ca366472773ab5ca5a7</string>
+    <string name="fb_login_protocol_scheme">fb2449693722133561</string>
+
+</resources>
