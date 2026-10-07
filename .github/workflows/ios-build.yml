@@ -2,7 +2,8 @@ name: Build Flutter iOS
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -16,49 +17,65 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
-          channel: 'stable'
+          flutter-version: '3.38.7'
+          channel: stable
+          cache: true
 
-      - name: Locate, Install & Build
+      - name: Check Flutter and Xcode
         run: |
-          # Automatically find directory with pubspec.yaml
+          flutter --version
+          flutter doctor -v
+          xcodebuild -version
+
+      - name: Find Flutter Project
+        run: |
           PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
+
           if [ -z "$PUBSPEC_PATH" ]; then
-            echo "Error: pubspec.yaml file missing!"
+            echo "ERROR: pubspec.yaml not found!"
             exit 1
           fi
-          
+
           TARGET_DIR=$(dirname "$PUBSPEC_PATH")
-          echo "Found project at: $TARGET_DIR"
-          cd "$TARGET_DIR"
-          
-          echo "==> Running Flutter Pub Get"
+
+          echo "Flutter project found at: $TARGET_DIR"
+          echo "PROJECT_DIR=$TARGET_DIR" >> $GITHUB_ENV
+
+      - name: Flutter Pub Get
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
           flutter pub get
-          
-          if [ -d "ios" ]; then
-            echo "==> Installing Pods"
-            cd ios
-            pod install || true
-            cd ..
-          fi
-          
-          echo "==> Building iOS Application"
+
+      - name: Install CocoaPods
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build iOS
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
           flutter build ios --release --no-codesign
-          
-          echo "==> Creating IPA Bundle"
+
+      - name: Create IPA
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
           cd build/ios/iphoneos
+
           mkdir -p Payload
-          cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
+
+          cp -R Runner.app Payload/Runner.app
+
           zip -r ios-app.ipa Payload
 
-      - name: Upload IPA Artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-runner
-          path: "**/ios-app.ipa"
+          name: aonejodi-ios
+          path: ${{ env.PROJECT_DIR }}/build/ios/iphoneos/ios-app.ipa
