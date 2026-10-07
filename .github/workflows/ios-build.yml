@@ -25,40 +25,36 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Locate Project and Build iOS
+      - name: Install Dependencies
         run: |
-          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
-          if [ -z "$PUBSPEC_PATH" ]; then
-            echo "Error: pubspec.yaml file not found in repo!"
-            exit 1
-          fi
-          
-          PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
-          echo "Found project directory at: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
-          
-          echo "==> Running Flutter Pub Get"
+          TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+          echo "Target directory: $TARGET_DIR"
+          cd "$TARGET_DIR"
           flutter pub get
-          
+
+      - name: Build iOS App
+        run: |
+          TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+          cd "$TARGET_DIR"
           if [ -d "ios" ]; then
             cd ios
             pod install || true
             cd ..
           fi
-          
-          echo "==> Building iOS Release"
           flutter build ios --release --no-codesign
 
-      - name: Find and Zip Runner Payload
+      - name: Create IPA Package
         run: |
-          IPA_DIR=$(find . -type d -name "iphoneos" | head -n 1)
-          if [ -n "$IPA_DIR" ]; then
-            cd "$IPA_DIR"
+          TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
+          cd "$TARGET_DIR"
+          BUILD_PATH="build/ios/iphoneos"
+          if [ -d "$BUILD_PATH" ]; then
+            cd "$BUILD_PATH"
             mkdir -p Payload
             cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
             zip -r ios-app.ipa Payload
           else
-            echo "Error: iphoneos output folder not found"
+            echo "Build path not found"
             exit 1
           fi
 
@@ -66,5 +62,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-runner
-          path: |
-            **/build/ios/iphoneos/ios-app.ipa
+          path: "**/build/ios/iphoneos/ios-app.ipa"
