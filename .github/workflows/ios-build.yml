@@ -2,38 +2,69 @@ name: Build Flutter iOS
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  build-ios:
+  build:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.22.0'
           channel: 'stable'
-          cache: true
 
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Build iOS App
-        run: flutter build ios --release --no-codesign
-
-      - name: Zip iOS Build
+      - name: Locate Project and Build iOS
         run: |
-          cd build/ios/iphoneos
-          zip -r Runner.app.zip Runner.app
+          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
+          if [ -z "$PUBSPEC_PATH" ]; then
+            echo "Error: pubspec.yaml file not found in repo!"
+            exit 1
+          fi
+          
+          PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
+          echo "Found project directory at: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
+          
+          echo "==> Running Flutter Pub Get"
+          flutter pub get
+          
+          if [ -d "ios" ]; then
+            cd ios
+            pod install || true
+            cd ..
+          fi
+          
+          echo "==> Building iOS Release"
+          flutter build ios --release --no-codesign
 
-      - name: Upload iOS Build Artifact
+      - name: Find and Zip Runner Payload
+        run: |
+          IPA_DIR=$(find . -type d -name "iphoneos" | head -n 1)
+          if [ -n "$IPA_DIR" ]; then
+            cd "$IPA_DIR"
+            mkdir -p Payload
+            cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
+            zip -r ios-app.ipa Payload
+          else
+            echo "Error: iphoneos output folder not found"
+            exit 1
+          fi
+
+      - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-runner
-          path: build/ios/iphoneos/Runner.app.zip
+          path: |
+            **/build/ios/iphoneos/ios-app.ipa
