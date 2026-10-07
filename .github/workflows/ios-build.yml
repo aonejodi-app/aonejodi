@@ -25,23 +25,33 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Install Dependencies & Build iOS
-        working-directory: './aonejodi 2'
+      - name: Locate, Install & Build
         run: |
-          echo "==> Current Directory: $(pwd)"
+          # Automatically find directory with pubspec.yaml
+          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
+          if [ -z "$PUBSPEC_PATH" ]; then
+            echo "Error: pubspec.yaml file missing!"
+            exit 1
+          fi
+          
+          TARGET_DIR=$(dirname "$PUBSPEC_PATH")
+          echo "Found project at: $TARGET_DIR"
+          cd "$TARGET_DIR"
+          
+          echo "==> Running Flutter Pub Get"
           flutter pub get
           
           if [ -d "ios" ]; then
+            echo "==> Installing Pods"
             cd ios
             pod install || true
             cd ..
           fi
           
+          echo "==> Building iOS Application"
           flutter build ios --release --no-codesign
-
-      - name: Create IPA Package
-        working-directory: './aonejodi 2'
-        run: |
+          
+          echo "==> Creating IPA Bundle"
           cd build/ios/iphoneos
           mkdir -p Payload
           cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
@@ -51,4 +61,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-runner
-          path: "aonejodi 2/build/ios/iphoneos/ios-app.ipa"
+          path: "**/ios-app.ipa"
