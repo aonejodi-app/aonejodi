@@ -1,64 +1,102 @@
-platform :ios, '12.0'
+name: Build Flutter iOS
 
-ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-project 'Runner', {
-  'Debug' => :debug,
-  'Profile' => :release,
-  'Release' => :release,
-}
+jobs:
+  build:
+    runs-on: macos-latest
 
-def flutter_root
-  generated_xcode_build_settings_path = File.expand_path(
-    File.join('..', 'Flutter', 'Generated.xcconfig'),
-    __FILE__
-  )
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-  unless File.exist?(generated_xcode_build_settings_path)
-    raise "#{generated_xcode_build_settings_path} must exist. Run flutter pub get first"
-  end
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
 
-  File.foreach(generated_xcode_build_settings_path) do |line|
-    matches = line.match(/FLUTTER_ROOT\=(.*)/)
-    return matches[1].strip if matches
-  end
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.3"
+          channel: stable
+          cache: true
 
-  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}"
-end
+      - name: Locate Flutter Project
+        id: project
+        shell: bash
+        run: |
+          PUBSPEC_PATH=$(find . \
+            -name pubspec.yaml \
+            -not -path "*/.dart_tool/*" \
+            -not -path "*/build/*" \
+            -not -path "*/.git/*" | head -n 1)
 
-require File.expand_path(
-  File.join('packages', 'flutter_tools', 'bin', 'podhelper'),
-  flutter_root
-)
+          if [ -z "$PUBSPEC_PATH" ]; then
+            echo "Error: pubspec.yaml not found"
+            exit 1
+          fi
 
-flutter_ios_podfile_setup
+          TARGET_DIR=$(dirname "$PUBSPEC_PATH")
+          echo "project_dir=$TARGET_DIR" >> "$GITHUB_OUTPUT"
+          echo "Flutter project: $TARGET_DIR"
 
-target 'Runner' do
-  use_frameworks!
-  use_modular_headers!
+      - name: Check Flutter Version
+        run: flutter --version
 
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+      - name: Get Flutter Dependencies
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        run: flutter pub get
 
-  target 'RunnerTests' do
-    inherit! :search_paths
-  end
-end
+      - name: Install CocoaPods Dependencies
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        shell: bash
+        run: |
+          if [ ! -d ios ]; then
+            echo "Error: ios folder not found"
+            exit 1
+          fi
 
-post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
+          cd ios
+          rm -f Podfile.lock
+          pod install --repo-update
 
-    target.build_configurations.each do |config|
-      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-      config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-      config.build_settings['CODE_SIGNING_IDENTITY'] = '-'
+      - name: Build iOS Release Without Code Signing
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        shell: bash
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=CI=true
 
-      if config.build_settings['WRAPPER_EXTENSION'] == 'bundle'
-        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-        config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-        config.build_settings['CODE_SIGNING_IDENTITY'] = '-'
-      end
-    end
-  end
-end
+      - name: Package IPA
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        shell: bash
+        run: |
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          IPA_DIR="build/ios/ipa"
 
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Error: Runner.app not found"
+            find build/ios -type d -name "*.app" || true
+            exit 1
+          fi
+
+          rm -rf "$IPA_DIR"
+          mkdir -p "$IPA_DIR/Payload"
+
+          cp -R "$APP_PATH" "$IPA_DIR/Payload/"
+          cd "$IPA_DIR"
+          zip -r ios-app.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-runner
+          path: ${{ steps.project.outputs.project_dir }}/build/ios/ipa/ios-app.ipa
+          if-no-files-found: error
+          retention-days: 7
