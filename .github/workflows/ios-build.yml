@@ -63,16 +63,14 @@ jobs:
           fi
 
           cd ios
-
-          echo "Removing old Podfile.lock..."
           rm -f Podfile.lock
-
-          pod repo update
           pod install --repo-update
 
-      - name: Build iOS Release
+      - name: Build iOS Release Without Code Signing
         working-directory: ${{ steps.project.outputs.project_dir }}
-        run: flutter build ios --release --no-codesign
+        shell: bash
+        run: |
+          flutter build ios --release --no-codesign
 
       - name: Package IPA
         working-directory: ${{ steps.project.outputs.project_dir }}
@@ -92,11 +90,9 @@ jobs:
 
           cp -R "$APP_PATH" "$IPA_DIR/Payload/"
           cd "$IPA_DIR"
-
           zip -r ios-app.ipa Payload
 
       - name: Upload IPA Artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-runner
