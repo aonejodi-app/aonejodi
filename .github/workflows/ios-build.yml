@@ -1,9 +1,9 @@
-```yaml
 name: Build Flutter iOS
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -31,9 +31,11 @@ jobs:
         id: project
         shell: bash
         run: |
-          PUBSPEC_PATH=$(find . -name pubspec.yaml \
+          PUBSPEC_PATH=$(find . \
+            -name pubspec.yaml \
             -not -path "*/.dart_tool/*" \
-            -not -path "*/build/*" | head -n 1)
+            -not -path "*/build/*" \
+            -not -path "*/.git/*" | head -n 1)
 
           if [ -z "$PUBSPEC_PATH" ]; then
             echo "Error: pubspec.yaml not found"
@@ -44,14 +46,14 @@ jobs:
           echo "project_dir=$TARGET_DIR" >> "$GITHUB_OUTPUT"
           echo "Flutter project: $TARGET_DIR"
 
-      - name: Check Flutter
+      - name: Check Flutter Version
         run: flutter --version
 
       - name: Get Flutter Dependencies
         working-directory: ${{ steps.project.outputs.project_dir }}
         run: flutter pub get
 
-      - name: Install CocoaPods
+      - name: Install CocoaPods Dependencies
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
@@ -61,7 +63,6 @@ jobs:
           fi
 
           cd ios
-
           pod --version
           pod install --repo-update
 
@@ -87,15 +88,12 @@ jobs:
 
           cp -R "$APP_PATH" "$IPA_DIR/Payload/"
           cd "$IPA_DIR"
-
           zip -r ios-app.ipa Payload
 
       - name: Upload IPA Artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-runner
           path: ${{ steps.project.outputs.project_dir }}/build/ios/ipa/ios-app.ipa
           if-no-files-found: error
           retention-days: 7
-```
