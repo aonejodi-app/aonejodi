@@ -21,6 +21,15 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Check Xcode Environment
+        shell: bash
+        run: |
+          flutter --version
+          xcodebuild -version
+          xcode-select -p
+          ruby --version
+          pod --version
+
       - name: Locate Flutter Project
         id: project
         shell: bash
@@ -50,9 +59,8 @@ jobs:
         run: |
           set -e
           cd ios
-
           rm -f Podfile.lock
-          pod install --repo-update --verbose
+          pod install --repo-update
 
       - name: Build iOS Without Code Signing
         working-directory: ${{ steps.project.outputs.project_dir }}
@@ -63,6 +71,26 @@ jobs:
             --release \
             --no-codesign \
             --verbose 2>&1 | tee ios-build.log
+
+      - name: Collect Xcode Diagnostic Log
+        if: failure()
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        shell: bash
+        run: |
+          mkdir -p build/ios/diagnostics
+
+          find ~/Library/Developer/Xcode/DerivedData \
+            -name "*.xcactivitylog" \
+            -type f \
+            -print 2>/dev/null | head -n 20 \
+            > build/ios/diagnostics/activity-logs.txt || true
+
+          if [ -f ios-build.log ]; then
+            grep -n -B 25 -A 25 -E \
+              "PhaseScriptExecution|error:|BUILD FAILED|CodeSign" \
+              ios-build.log \
+              > build/ios/diagnostics/build-errors.txt || true
+          fi
 
       - name: Package Unsigned App
         if: success()
@@ -91,11 +119,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload Build Log
+      - name: Upload Build Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-log
-          path: ${{ steps.project.outputs.project_dir }}/ios-build.log
+          name: ios-build-diagnostics
+          path: |
+            ${{ steps.project.outputs.project_dir }}/ios-build.log
+            ${{ steps.project.outputs.project_dir }}/build/ios/diagnostics/
           if-no-files-found: warn
           retention-days: 7
