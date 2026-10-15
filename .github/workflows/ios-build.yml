@@ -97,3 +97,4 @@ jobs:
           path: ${{ steps.project.outputs.project_dir }}/build/ios/ipa/ios-app.ipa
           if-no-files-found: error
           retention-days: 7
+
