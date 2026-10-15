@@ -22,12 +22,11 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.22.3'
           channel: 'stable'
 
       - name: Build iOS Application
         run: |
-          # Safe path finding with double quotes for spaces
           PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
           if [ -z "$PUBSPEC_PATH" ]; then
             echo "Error: pubspec.yaml file missing!"
