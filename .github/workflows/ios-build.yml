@@ -1,4 +1,4 @@
-name: Build Flutter iOS
+name: Build Flutter iOS Unsigned
 
 on:
   push:
@@ -13,12 +13,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: "17"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -38,65 +32,67 @@ jobs:
             -not -path "*/.git/*" | head -n 1)
 
           if [ -z "$PUBSPEC_PATH" ]; then
-            echo "Error: pubspec.yaml not found"
+            echo "pubspec.yaml not found"
             exit 1
           fi
 
-          TARGET_DIR=$(dirname "$PUBSPEC_PATH")
-          echo "project_dir=$TARGET_DIR" >> "$GITHUB_OUTPUT"
-          echo "Flutter project: $TARGET_DIR"
-
-      - name: Check Flutter Version
-        run: flutter --version
+          PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Project: $PROJECT_DIR"
 
       - name: Get Flutter Dependencies
         working-directory: ${{ steps.project.outputs.project_dir }}
         run: flutter pub get
 
-      - name: Install CocoaPods Dependencies
+      - name: Install CocoaPods
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
-          if [ ! -d ios ]; then
-            echo "Error: ios folder not found"
-            exit 1
-          fi
-
           cd ios
-          rm -f Podfile.lock
           pod install --repo-update
 
-      - name: Build iOS Release Without Code Signing
+      - name: Build iOS Without Code Signing
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
-          flutter build ios --release --no-codesign \
-            --dart-define=CI=true
+          set -o pipefail
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --verbose 2>&1 | tee ios-build.log
 
-      - name: Package IPA
+      - name: Package Unsigned App
+        if: success()
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
           APP_PATH="build/ios/iphoneos/Runner.app"
-          IPA_DIR="build/ios/ipa"
+          ARTIFACT_DIR="build/ios/artifacts"
 
           if [ ! -d "$APP_PATH" ]; then
-            echo "Error: Runner.app not found"
-            find build/ios -type d -name "*.app" || true
+            echo "Runner.app not found"
             exit 1
           fi
 
-          rm -rf "$IPA_DIR"
-          mkdir -p "$IPA_DIR/Payload"
+          mkdir -p "$ARTIFACT_DIR"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$APP_PATH" \
+            "$ARTIFACT_DIR/Runner-unsigned.zip"
 
-          cp -R "$APP_PATH" "$IPA_DIR/Payload/"
-          cd "$IPA_DIR"
-          zip -r ios-app.ipa Payload
-
-      - name: Upload IPA Artifact
+      - name: Upload Unsigned iOS App
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-runner
-          path: ${{ steps.project.outputs.project_dir }}/build/ios/ipa/ios-app.ipa
+          name: ios-unsigned-app
+          path: ${{ steps.project.outputs.project_dir }}/build/ios/artifacts/Runner-unsigned.zip
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ${{ steps.project.outputs.project_dir }}/ios-build.log
+          if-no-files-found: warn
           retention-days: 7
