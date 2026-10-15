@@ -44,11 +44,13 @@ jobs:
         working-directory: ${{ steps.project.outputs.project_dir }}
         run: flutter pub get
 
+      
       - name: Install CocoaPods
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
           cd ios
+          rm -f Podfile.lock
           pod install --repo-update
 
       - name: Build iOS Without Code Signing
