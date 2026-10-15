@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '17'
@@ -25,9 +25,9 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Locate Project and Build iOS
+      - name: Build iOS Application
         run: |
-          # 1. Automatically find directory with pubspec.yaml
+          # Safe path finding with double quotes for spaces
           PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
           if [ -z "$PUBSPEC_PATH" ]; then
             echo "Error: pubspec.yaml file missing!"
@@ -35,32 +35,38 @@ jobs:
           fi
           
           TARGET_DIR=$(dirname "$PUBSPEC_PATH")
-          echo "Found project at: $TARGET_DIR"
+          echo "Target Directory: $TARGET_DIR"
           cd "$TARGET_DIR"
           
-          # 2. Dependencies
           echo "==> Running Flutter Pub Get"
           flutter pub get
           
-          # 3. CocoaPods Setup
           if [ -d "ios" ]; then
-            echo "==> Setting up Pods"
+            echo "==> Installing CocoaPods"
             cd ios
-            pod deintegrate || true
             pod install || true
             cd ..
           fi
           
-          # 4. Build iOS App
-          echo "==> Building iOS Release"
+          echo "==> Building Flutter iOS Release"
           flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        run: |
+          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
+          TARGET_DIR=$(dirname "$PUBSPEC_PATH")
+          cd "$TARGET_DIR"
           
-          # 5. Create IPA Bundle
-          echo "==> Creating IPA Package"
-          cd build/ios/iphoneos
-          mkdir -p Payload
-          cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
-          zip -r ios-app.ipa Payload
+          IPA_PATH=$(find . -type d -name "iphoneos" | head -n 1)
+          if [ -n "$IPA_PATH" ]; then
+            cd "$IPA_PATH"
+            mkdir -p Payload
+            cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
+            zip -r ios-app.ipa Payload
+          else
+            echo "Error: iphoneos build directory missing"
+            exit 1
+          fi
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
