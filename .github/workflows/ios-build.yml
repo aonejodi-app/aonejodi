@@ -52,7 +52,12 @@ jobs:
 
       - name: Get Flutter Dependencies
         working-directory: ${{ steps.project.outputs.project_dir }}
-        run: flutter pub get
+        shell: bash
+        run: |
+          flutter clean
+          flutter pub get
+          flutter pub deps | grep -E \
+            "image_cropper|image_cropper_platform_interface" || true
 
       - name: Install CocoaPods
         working-directory: ${{ steps.project.outputs.project_dir }}
@@ -82,7 +87,7 @@ jobs:
 
           if [ -f ios-build.log ]; then
             grep -n -B 40 -A 40 -E \
-              "PhaseScriptExecution|error:|BUILD FAILED|CodeSign|xcresulttool" \
+              "PhaseScriptExecution|error:|BUILD FAILED|CodeSign|xcresulttool|toARGB32" \
               ios-build.log \
               > build/ios/diagnostics/build-errors.txt || true
           fi
