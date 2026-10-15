@@ -1,8 +1,9 @@
+
 name: Build Flutter iOS
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
@@ -16,61 +17,71 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: zulu
+          java-version: "17"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.3'
-          channel: 'stable'
+          flutter-version: "3.22.3"
+          channel: stable
 
-      - name: Build iOS Application
+      - name: Locate Flutter Project
+        id: project
+        shell: bash
         run: |
-          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
+          PUBSPEC_PATH=$(find . -name pubspec.yaml -not -path "*/.*" | head -n 1)
           if [ -z "$PUBSPEC_PATH" ]; then
-            echo "Error: pubspec.yaml file missing!"
+            echo "Error: pubspec.yaml not found"
             exit 1
           fi
-          
           TARGET_DIR=$(dirname "$PUBSPEC_PATH")
-          echo "Target Directory: $TARGET_DIR"
-          cd "$TARGET_DIR"
-          
-          echo "==> Running Flutter Pub Get"
-          flutter pub get
-          
-          if [ -d "ios" ]; then
-            echo "==> Installing CocoaPods"
-            cd ios
-            rm -f Podfile.lock
-            pod repo update || true
-            pod install || pod install --repo-update
-            cd ..
+          echo "project_dir=$TARGET_DIR" >> "$GITHUB_OUTPUT"
+          echo "Flutter project: $TARGET_DIR"
+
+      - name: Get Flutter Dependencies
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        run: flutter pub get
+
+      - name: Install CocoaPods
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        shell: bash
+        run: |
+          if [ ! -d ios ]; then
+            echo "Error: ios folder not found"
+            exit 1
           fi
-          
-          echo "==> Building Flutter iOS Release"
-          flutter build ios --release --no-codesign --verbose
+
+          cd ios
+          pod repo update
+
+          # Keep the Podfile.lock unless dependency resolution requires a change.
+          pod install --repo-update
+
+      - name: Build iOS Release
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        run: flutter build ios --release --no-codesign
 
       - name: Package IPA
+        working-directory: ${{ steps.project.outputs.project_dir }}
+        shell: bash
         run: |
-          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -not -path "*/.*" | head -n 1)
-          TARGET_DIR=$(dirname "$PUBSPEC_PATH")
-          cd "$TARGET_DIR"
-          
-          IPA_PATH=$(find . -type d -name "iphoneos" | head -n 1)
-          if [ -n "$IPA_PATH" ]; then
-            cd "$IPA_PATH"
-            mkdir -p Payload
-            cp -R Runner.app Payload/ 2>/dev/null || mv Runner.app Payload/
-            zip -r ios-app.ipa Payload
-          else
-            echo "Error: iphoneos build directory missing"
+          APP_PATH="build/ios/iphoneos/Runner.app"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Error: Runner.app not found at $APP_PATH"
+            find build/ios -maxdepth 4 -type d -name "*.app" || true
             exit 1
           fi
+
+          mkdir -p build/ios/ipa/Payload
+          cp -R "$APP_PATH" build/ios/ipa/Payload/
+          cd build/ios/ipa
+          zip -r ios-app.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-runner
-          path: "**/ios-app.ipa"
+          path: ${{ steps.project.outputs.project_dir }}/build/ios/ipa/ios-app.ipa
+          if-no-files-found: error
