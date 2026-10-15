@@ -1,3 +1,4 @@
+
 name: Build Flutter iOS Unsigned
 
 on:
@@ -8,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - name: Checkout Repository
@@ -60,7 +61,7 @@ jobs:
           set -e
           cd ios
           rm -f Podfile.lock
-          pod install --repo-update
+          pod install --repo-update --verbose
 
       - name: Build iOS Without Code Signing
         working-directory: ${{ steps.project.outputs.project_dir }}
@@ -72,31 +73,32 @@ jobs:
             --no-codesign \
             --verbose 2>&1 | tee ios-build.log
 
-      - name: Collect Xcode Diagnostic Log
-        if: failure()
+      - name: Collect Diagnostics
+        if: always()
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
           mkdir -p build/ios/diagnostics
 
-          find ~/Library/Developer/Xcode/DerivedData \
-            -name "*.xcactivitylog" \
-            -type f \
-            -print 2>/dev/null | head -n 20 \
-            > build/ios/diagnostics/activity-logs.txt || true
-
           if [ -f ios-build.log ]; then
-            grep -n -B 25 -A 25 -E \
-              "PhaseScriptExecution|error:|BUILD FAILED|CodeSign" \
+            grep -n -B 40 -A 40 -E \
+              "PhaseScriptExecution|error:|BUILD FAILED|CodeSign|xcresulttool" \
               ios-build.log \
               > build/ios/diagnostics/build-errors.txt || true
           fi
+
+          xcodebuild -version \
+            > build/ios/diagnostics/xcode-version.txt 2>&1 || true
+
+          flutter --version \
+            > build/ios/diagnostics/flutter-version.txt 2>&1 || true
 
       - name: Package Unsigned App
         if: success()
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
+          set -e
           APP_PATH="build/ios/iphoneos/Runner.app"
           ARTIFACT_DIR="build/ios/artifacts"
 
