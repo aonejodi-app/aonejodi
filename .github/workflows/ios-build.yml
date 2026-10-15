@@ -44,7 +44,6 @@ jobs:
         working-directory: ${{ steps.project.outputs.project_dir }}
         run: flutter pub get
 
-      
       - name: Install CocoaPods
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
