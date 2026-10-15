@@ -70,7 +70,8 @@ jobs:
         working-directory: ${{ steps.project.outputs.project_dir }}
         shell: bash
         run: |
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign \
+            --dart-define=CI=true
 
       - name: Package IPA
         working-directory: ${{ steps.project.outputs.project_dir }}
